@@ -104,7 +104,7 @@ export default function FAQEditor({ categoryId, categoryName }: FAQEditorProps) 
                         value={question}
                         onChange={(e) => setQuestion(e.target.value)}
                         placeholder="e.g., How much is your product?"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 bg-gray-50 focus:ring-blue-500 text-sm"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 bg-gray-50 focus:ring-blue-500 text-sm text-black"
                     />
                 </div>
                 <div>
@@ -116,7 +116,7 @@ export default function FAQEditor({ categoryId, categoryName }: FAQEditorProps) 
                         onChange={(e) => setAnswer(e.target.value)}
                         placeholder="e.g., Our product starts at ₱1,500 po for the Premium Package..."
                         rows={3}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 bg-gray-50 focus:ring-blue-500 text-sm resize-none"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 bg-gray-50 focus:ring-blue-500 text-sm text-black resize-none"
                     />
                 </div>
                 <button
