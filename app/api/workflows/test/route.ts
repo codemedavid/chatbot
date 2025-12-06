@@ -12,9 +12,10 @@ export async function POST(req: Request) {
         }
 
         console.log(`[TEST] Starting workflow execution: ${workflowId} for lead ${leadId}`);
+        console.log(`[TEST] Sender ID: ${senderId}`);
 
-        // Execute the workflow
-        await executeWorkflow(workflowId, leadId, senderId);
+        // Execute the workflow (skip publish check for testing)
+        await executeWorkflow(workflowId, leadId, senderId, true);
 
         return NextResponse.json({
             success: true,

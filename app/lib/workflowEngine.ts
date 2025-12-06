@@ -36,24 +36,38 @@ interface ExecutionContext {
 export async function executeWorkflow(
     workflowId: string,
     leadId: string,
-    senderId: string
+    senderId: string,
+    skipPublishCheck: boolean = false
 ): Promise<void> {
     console.log(`Starting workflow ${workflowId} for lead ${leadId}`);
 
     // Get workflow data
-    const { data: workflow } = await supabase
+    let query = supabase
         .from('workflows')
         .select('*')
-        .eq('id', workflowId)
-        .eq('is_published', true)
-        .single();
+        .eq('id', workflowId);
+
+    // Only check published status if not skipping
+    if (!skipPublishCheck) {
+        query = query.eq('is_published', true);
+    }
+
+    const { data: workflow, error: workflowError } = await query.single();
+
+    if (workflowError) {
+        console.error('Error fetching workflow:', workflowError);
+        return;
+    }
 
     if (!workflow) {
         console.error('Workflow not found or not published:', workflowId);
         return;
     }
 
+    console.log('Workflow loaded:', workflow.name);
+
     const workflowData = workflow.workflow_data as WorkflowData;
+    console.log('Workflow data:', JSON.stringify(workflowData, null, 2));
 
     // Find trigger node
     const triggerNode = workflowData.nodes.find(n => n.data.type === 'trigger');
@@ -62,8 +76,10 @@ export async function executeWorkflow(
         return;
     }
 
+    console.log('Trigger node found:', triggerNode.id);
+
     // Create execution record
-    const { data: execution } = await supabase
+    const { data: execution, error: execError } = await supabase
         .from('workflow_executions')
         .insert({
             workflow_id: workflowId,
@@ -75,10 +91,17 @@ export async function executeWorkflow(
         .select()
         .single();
 
+    if (execError) {
+        console.error('Error creating execution record:', execError);
+        return;
+    }
+
     if (!execution) {
         console.error('Failed to create execution record');
         return;
     }
+
+    console.log('Execution record created:', execution.id);
 
     // Start executing from trigger
     await continueExecution(execution.id, workflowData, { leadId, senderId });
@@ -89,18 +112,29 @@ export async function continueExecution(
     workflowData: WorkflowData,
     context: ExecutionContext
 ): Promise<void> {
-    const { data: execution } = await supabase
+    console.log('continueExecution called for:', executionId);
+
+    const { data: execution, error: execError } = await supabase
         .from('workflow_executions')
         .select('*')
         .eq('id', executionId)
         .single();
 
-    if (!execution || execution.status !== 'pending') {
+    if (execError) {
+        console.error('Error fetching execution:', execError);
         return;
     }
 
+    if (!execution || execution.status !== 'pending') {
+        console.log('Execution not found or not pending:', execution?.status);
+        return;
+    }
+
+    console.log('Current node ID:', execution.current_node_id);
+
     const currentNode = workflowData.nodes.find(n => n.id === execution.current_node_id);
     if (!currentNode) {
+        console.log('No current node found - end of workflow');
         // End of workflow
         await supabase
             .from('workflow_executions')
@@ -110,9 +144,11 @@ export async function continueExecution(
     }
 
     console.log(`Executing node ${currentNode.id} (${currentNode.data.type})`);
+    console.log('Node data:', JSON.stringify(currentNode.data, null, 2));
 
     // Execute the node
     const nextNodeId = await executeNode(currentNode, workflowData, context, executionId);
+    console.log('Next node ID:', nextNodeId);
 
     if (nextNodeId === 'WAIT') {
         // Node scheduled for later execution
@@ -236,8 +272,26 @@ Respond with ONLY the message text to send, nothing else. Keep it natural and co
 }
 
 function getNextNode(nodeId: string, workflowData: WorkflowData): string | null {
-    const edge = workflowData.edges.find(e => e.source === nodeId);
-    return edge?.target || null;
+    console.log('Getting next node for:', nodeId);
+    console.log('Available edges:', workflowData.edges.map(e => `${e.source} -> ${e.target}`));
+
+    // Find all edges from this node
+    const edges = workflowData.edges.filter(e => e.source === nodeId);
+    console.log('Matching edges:', edges.map(e => e.target));
+
+    // Find the first edge where target node actually exists
+    for (const edge of edges) {
+        const targetNode = workflowData.nodes.find(n => n.id === edge.target);
+        if (targetNode) {
+            console.log('Found valid next node:', edge.target, '(', targetNode.data.type, ')');
+            return edge.target;
+        } else {
+            console.warn('Target node does not exist:', edge.target);
+        }
+    }
+
+    console.log('No valid next node found');
+    return null;
 }
 
 function getNextNodeByCondition(
