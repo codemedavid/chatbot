@@ -49,7 +49,7 @@ export async function addDocument(content: string, metadata: any = {}) {
         for (const chunk of chunks) {
             const embedding = await getEmbedding(chunk.pageContent, 'passage');
 
-            // Build insert object with optional category_id
+            // First try with category_id (if column exists)
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const insertData: any = {
                 content: chunk.pageContent,
@@ -57,12 +57,20 @@ export async function addDocument(content: string, metadata: any = {}) {
                 embedding: embedding,
             };
 
-            // Add category_id if provided
+            // Try insert with category_id first
             if (categoryId) {
                 insertData.category_id = categoryId;
             }
 
-            const { error } = await supabase.from('documents').insert(insertData);
+            let { error } = await supabase.from('documents').insert(insertData);
+
+            // If category_id column doesn't exist, retry without it
+            if (error && error.message?.includes('category_id')) {
+                console.log('[RAG] category_id column not found, retrying without it...');
+                delete insertData.category_id;
+                const retryResult = await supabase.from('documents').insert(insertData);
+                error = retryResult.error;
+            }
 
             if (error) {
                 console.error('Error inserting chunk:', error);
@@ -79,39 +87,168 @@ export async function addDocument(content: string, metadata: any = {}) {
     }
 }
 
-export async function searchDocuments(query: string, limit: number = 3) {
+/**
+ * Multi-Vector Retrieval with Query Expansion
+ * 
+ * Strategy:
+ * 1. Original query search
+ * 2. Expanded query variations (rephrased questions)
+ * 3. Keyword extraction search
+ * 4. Combine and dedupe results
+ */
+export async function searchDocuments(query: string, limit: number = 5) {
     try {
-        // 1. Generate embedding for query
-        const queryEmbedding = await getEmbedding(query, 'query');
-        console.log('Query embedding length:', queryEmbedding.length);
+        console.log(`[RAG] Multi-vector search for: "${query}"`);
 
-        // 2. Search Supabase via RPC
-        const { data: documents, error } = await supabase.rpc('match_documents', {
+        // Generate embedding for the original query
+        const queryEmbedding = await getEmbedding(query, 'query');
+
+        // Strategy 1: Direct semantic search with original query
+        const { data: semanticResults, error: semanticError } = await supabase.rpc('match_documents', {
             query_embedding: queryEmbedding,
-            match_threshold: 0.35, // Balanced threshold - not too strict, not too loose
+            match_threshold: 0.30, // Lowered threshold for better recall
             match_count: limit,
         });
 
-        if (error) {
-            console.error('Error searching documents:', error);
-            throw error;
+        if (semanticError) {
+            console.error('Semantic search error:', semanticError);
         }
 
-        // Log with similarity scores for debugging
-        console.log('[RAG] Search results count:', documents?.length || 0);
-        if (documents && documents.length > 0) {
-            documents.forEach((doc: any, i: number) => {
-                console.log(`[RAG] Doc ${i + 1} similarity: ${doc.similarity?.toFixed(3) || 'N/A'}, preview: ${doc.content?.substring(0, 100)}...`);
+        // Strategy 2: Extract key terms and do keyword-based search
+        const keyTerms = extractKeyTerms(query);
+        let keywordResults: any[] = [];
+
+        if (keyTerms.length > 0) {
+            // Search for documents containing key terms
+            const { data: kwResults, error: kwError } = await supabase
+                .from('documents')
+                .select('id, content, metadata')
+                .or(keyTerms.map(term => `content.ilike.%${term}%`).join(','))
+                .limit(limit);
+
+            if (!kwError && kwResults) {
+                keywordResults = kwResults.map(doc => ({
+                    ...doc,
+                    similarity: 0.5, // Assign moderate similarity for keyword matches
+                    matchType: 'keyword'
+                }));
+            }
+        }
+
+        // Strategy 3: Question variation search (for Q&A format)
+        let qaResults: any[] = [];
+        const questionVariations = generateQuestionVariations(query);
+
+        for (const variation of questionVariations.slice(0, 2)) { // Limit to 2 variations
+            const varEmbedding = await getEmbedding(variation, 'query');
+            const { data: varResults, error: varError } = await supabase.rpc('match_documents', {
+                query_embedding: varEmbedding,
+                match_threshold: 0.30,
+                match_count: 3,
             });
+
+            if (!varError && varResults) {
+                qaResults.push(...varResults.map((doc: any) => ({
+                    ...doc,
+                    matchType: 'variation'
+                })));
+            }
         }
 
-        if (!documents || documents.length === 0) {
+        // Combine and deduplicate results
+        const allResults = [
+            ...(semanticResults || []).map((doc: any) => ({ ...doc, matchType: 'semantic' })),
+            ...keywordResults,
+            ...qaResults
+        ];
+
+        // Dedupe by content, keeping highest similarity
+        const seenContent = new Map<string, any>();
+        for (const doc of allResults) {
+            const existing = seenContent.get(doc.content);
+            if (!existing || (doc.similarity || 0) > (existing.similarity || 0)) {
+                seenContent.set(doc.content, doc);
+            }
+        }
+
+        // Sort by similarity and take top results
+        const uniqueResults = Array.from(seenContent.values())
+            .sort((a, b) => (b.similarity || 0) - (a.similarity || 0))
+            .slice(0, limit);
+
+        // Log results for debugging
+        console.log(`[RAG] Multi-vector search results: ${uniqueResults.length} documents`);
+        uniqueResults.forEach((doc: any, i: number) => {
+            console.log(`[RAG] Doc ${i + 1} [${doc.matchType}] sim: ${doc.similarity?.toFixed(3) || 'N/A'}, preview: ${doc.content?.substring(0, 80)}...`);
+        });
+
+        if (uniqueResults.length === 0) {
+            console.log('[RAG] No documents found');
             return '';
         }
 
-        return documents.map((doc: any) => doc.content).join('\n\n');
+        return uniqueResults.map((doc: any) => doc.content).join('\n\n');
     } catch (error) {
         console.error('Error in RAG search:', error);
         return '';
     }
+}
+
+/**
+ * Extract key terms from query for keyword search
+ */
+function extractKeyTerms(query: string): string[] {
+    // Remove common stop words and extract meaningful terms
+    const stopWords = new Set([
+        'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+        'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should',
+        'may', 'might', 'must', 'shall', 'can', 'need', 'dare', 'ought', 'used',
+        'what', 'which', 'who', 'whom', 'this', 'that', 'these', 'those', 'am',
+        'your', 'you', 'how', 'much', 'many', 'po', 'ba', 'na', 'ng', 'sa', 'ang',
+        'yung', 'mo', 'ko', 'nyo', 'nila', 'ka', 'ako', 'siya', 'kami', 'tayo', 'sila',
+        'magkano', 'ano', 'paano', 'saan', 'kailan', 'bakit', 'ilan'
+    ]);
+
+    const words = query.toLowerCase()
+        .replace(/[^\w\s]/g, '')
+        .split(/\s+/)
+        .filter(word => word.length > 2 && !stopWords.has(word));
+
+    return [...new Set(words)].slice(0, 5); // Max 5 key terms
+}
+
+/**
+ * Generate question variations for better Q&A matching
+ */
+function generateQuestionVariations(query: string): string[] {
+    const variations: string[] = [];
+    const lowerQuery = query.toLowerCase();
+
+    // If asking about price
+    if (lowerQuery.includes('price') || lowerQuery.includes('cost') || lowerQuery.includes('magkano') || lowerQuery.includes('presyo')) {
+        variations.push('What is the price?');
+        variations.push('How much does it cost?');
+        variations.push('Magkano?');
+    }
+
+    // If asking about product
+    if (lowerQuery.includes('product') || lowerQuery.includes('produkto') || lowerQuery.includes('item')) {
+        variations.push('What products do you have?');
+        variations.push('Tell me about your products');
+    }
+
+    // If asking about delivery
+    if (lowerQuery.includes('deliver') || lowerQuery.includes('shipping') || lowerQuery.includes('padala')) {
+        variations.push('Do you deliver?');
+        variations.push('How much is shipping?');
+        variations.push('Nagdedeliver ba kayo?');
+    }
+
+    // If asking about payment
+    if (lowerQuery.includes('pay') || lowerQuery.includes('bayad') || lowerQuery.includes('gcash') || lowerQuery.includes('bank')) {
+        variations.push('What payment methods do you accept?');
+        variations.push('How can I pay?');
+    }
+
+    return variations;
 }
