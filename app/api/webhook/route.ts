@@ -81,6 +81,138 @@ async function getPageToken(pageId?: string): Promise<string | null> {
     return settings.facebook_page_access_token || process.env.FACEBOOK_PAGE_ACCESS_TOKEN || null;
 }
 
+// Payment-related keywords to detect
+const PAYMENT_KEYWORDS = [
+    'payment', 'bayad', 'magbayad', 'pay', 'gcash', 'maya', 'paymaya',
+    'bank', 'transfer', 'account', 'qr', 'qr code', 'send payment',
+    'how to pay', 'paano magbayad', 'payment method', 'payment option',
+    'where to pay', 'saan magbabayad', 'bank details', 'account number',
+    'bdo', 'bpi', 'metrobank', 'unionbank', 'landbank', 'pnb',
+    'remittance', 'padala', 'deposit', 'magkano', 'price', 'presyo'
+];
+
+// Check if message is asking about payment methods
+function isPaymentQuery(message: string): boolean {
+    const lowerMessage = message.toLowerCase();
+    return PAYMENT_KEYWORDS.some(keyword => lowerMessage.includes(keyword));
+}
+
+// Payment method type
+interface PaymentMethod {
+    id: string;
+    name: string;
+    account_name: string | null;
+    account_number: string | null;
+    qr_code_url: string | null;
+    instructions: string | null;
+    is_active: boolean;
+}
+
+// Fetch active payment methods from database
+async function getPaymentMethods(): Promise<PaymentMethod[]> {
+    try {
+        const { data, error } = await supabase
+            .from('payment_methods')
+            .select('*')
+            .eq('is_active', true)
+            .order('display_order', { ascending: true });
+
+        if (error || !data) {
+            console.log('No payment methods found or error:', error);
+            return [];
+        }
+
+        return data;
+    } catch (error) {
+        console.error('Error fetching payment methods:', error);
+        return [];
+    }
+}
+
+// Send payment methods as Facebook Generic Template cards
+async function sendPaymentMethodCards(sender_psid: string, methods: PaymentMethod[], pageId?: string) {
+    const PAGE_ACCESS_TOKEN = await getPageToken(pageId);
+    if (!PAGE_ACCESS_TOKEN || methods.length === 0) return false;
+
+    // Build elements for Generic Template (max 10)
+    const elements = methods.slice(0, 10).map(pm => {
+        const subtitle = [
+            pm.account_name ? `Account: ${pm.account_name}` : null,
+            pm.account_number ? `Number: ${pm.account_number}` : null,
+        ].filter(Boolean).join('\n');
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const element: any = {
+            title: pm.name,
+            subtitle: subtitle || 'Payment method available',
+        };
+
+        // Add QR code image if available
+        if (pm.qr_code_url) {
+            element.image_url = pm.qr_code_url;
+        }
+
+        // Add buttons
+        element.buttons = [
+            {
+                type: 'postback',
+                title: '✅ I\'ll pay here',
+                payload: `PAY_${pm.id}`
+            }
+        ];
+
+        // Add View QR button if QR code exists
+        if (pm.qr_code_url) {
+            element.buttons.push({
+                type: 'web_url',
+                title: '📱 View QR Code',
+                url: pm.qr_code_url,
+                webview_height_ratio: 'tall'
+            });
+        }
+
+        return element;
+    });
+
+    const requestBody = {
+        recipient: { id: sender_psid },
+        message: {
+            attachment: {
+                type: 'template',
+                payload: {
+                    template_type: 'generic',
+                    elements: elements
+                }
+            }
+        }
+    };
+
+    console.log('Sending payment cards:', JSON.stringify(requestBody, null, 2));
+
+    try {
+        const res = await fetch(
+            `https://graph.facebook.com/v21.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody),
+            }
+        );
+
+        const resData = await res.json();
+        if (!res.ok) {
+            console.error('Failed to send payment cards:', resData);
+            return false;
+        }
+
+        console.log('Payment cards sent successfully');
+        return true;
+    } catch (error) {
+        console.error('Error sending payment cards:', error);
+        return false;
+    }
+}
+
 export async function GET(req: Request) {
     const settings = await getSettings();
     const VERIFY_TOKEN = settings.facebook_verify_token || process.env.FACEBOOK_VERIFY_TOKEN || 'TEST_TOKEN';
@@ -246,6 +378,30 @@ async function handleMessage(sender_psid: string, received_message: string, page
 
     // Process message and send response
     try {
+        // Check if this is a payment-related query
+        if (isPaymentQuery(received_message)) {
+            console.log('Payment query detected, fetching payment methods...');
+            const paymentMethods = await getPaymentMethods();
+
+            if (paymentMethods.length > 0) {
+                // Send intro message first
+                await callSendAPI(sender_psid, {
+                    text: 'Ito po ang aming payment options! 💳 Pwede po kayong pumili kung saan kayo magbabayad:'
+                }, pageId);
+
+                // Send payment method cards
+                const cardsSent = await sendPaymentMethodCards(sender_psid, paymentMethods, pageId);
+
+                if (cardsSent) {
+                    // Also send a follow-up message
+                    await callSendAPI(sender_psid, {
+                        text: 'Pag nakapagbayad na po kayo, kindly send the screenshot ng receipt para ma-verify namin. Salamat po! 🙏'
+                    }, pageId);
+                    return; // Don't send AI response, cards are enough
+                }
+            }
+        }
+
         // Get page access token for profile fetching (using per-page token)
         const pageToken = await getPageToken(pageId);
 
