@@ -10,10 +10,13 @@ import {
 } from 'lucide-react';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { createClient } from '@/app/lib/supabaseClient';
 
 export default function Sidebar() {
     const pathname = usePathname();
+    const router = useRouter();
+    const supabase = createClient();
 
     const navItems = [
         { icon: LayoutGrid, href: '/', label: 'Dashboard' },
@@ -21,6 +24,12 @@ export default function Sidebar() {
         { icon: Workflow, href: '/workflows', label: 'Workflows' },
         { icon: Settings, href: '/settings', label: 'Settings' },
     ];
+
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
+        router.push('/login');
+        router.refresh();
+    };
 
     return (
         <div className="w-16 bg-[#1C1C1C] h-screen flex flex-col items-center py-6 text-gray-400 border-r border-gray-800 flex-shrink-0">
@@ -52,13 +61,18 @@ export default function Sidebar() {
             </nav>
 
             <div className="flex flex-col gap-4 w-full items-center mt-auto">
-                <button className="p-2 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
+                <button className="p-2 hover:text-white hover:bg-white/10 rounded-lg transition-colors" title="Help">
                     <HelpCircle size={20} />
                 </button>
-                <button className="p-2 hover:text-white hover:bg-white/10 rounded-lg transition-colors">
+                <button
+                    onClick={handleLogout}
+                    className="p-2 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                    title="Logout"
+                >
                     <LogOut size={20} />
                 </button>
             </div>
         </div>
     );
 }
+
