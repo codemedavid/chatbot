@@ -87,6 +87,55 @@ async function getBotInstructions(): Promise<string> {
     }
 }
 
+// Payment-related keywords to detect
+const PAYMENT_KEYWORDS = [
+    'payment', 'bayad', 'magbayad', 'pay', 'gcash', 'maya', 'paymaya',
+    'bank', 'transfer', 'account', 'qr', 'qr code', 'send payment',
+    'how to pay', 'paano magbayad', 'payment method', 'payment option',
+    'where to pay', 'saan magbabayad', 'bank details', 'account number',
+    'bdo', 'bpi', 'metrobank', 'unionbank', 'landbank', 'pnb',
+    'remittance', 'padala', 'deposit'
+];
+
+// Check if message is asking about payment methods
+function isPaymentQuery(message: string): boolean {
+    const lowerMessage = message.toLowerCase();
+    return PAYMENT_KEYWORDS.some(keyword => lowerMessage.includes(keyword));
+}
+
+// Fetch active payment methods from database
+async function getPaymentMethods(): Promise<string> {
+    try {
+        const { data, error } = await supabase
+            .from('payment_methods')
+            .select('name, account_name, account_number, instructions, qr_code_url')
+            .eq('is_active', true)
+            .order('display_order', { ascending: true });
+
+        if (error || !data || data.length === 0) {
+            console.log('No payment methods found or error:', error);
+            return '';
+        }
+
+        // Format payment methods for the AI
+        let formatted = 'AVAILABLE PAYMENT METHODS:\n';
+        data.forEach((pm, index) => {
+            formatted += `\n${index + 1}. ${pm.name}`;
+            if (pm.account_name) formatted += `\n   Account Name: ${pm.account_name}`;
+            if (pm.account_number) formatted += `\n   Account/Number: ${pm.account_number}`;
+            if (pm.instructions) formatted += `\n   Instructions: ${pm.instructions}`;
+            if (pm.qr_code_url) formatted += `\n   [QR Code Available]`;
+        });
+        formatted += '\n';
+
+        console.log('[Payment Methods]:', formatted);
+        return formatted;
+    } catch (error) {
+        console.error('Error fetching payment methods:', error);
+        return '';
+    }
+}
+
 // Fetch conversation history for a sender (last 20 messages)
 async function getConversationHistory(senderId: string): Promise<{ role: string; content: string }[]> {
     try {
@@ -180,6 +229,13 @@ export async function getBotResponse(
     // Store user message immediately (fire and forget)
     storeMessageAsync(senderId, 'user', userMessage);
 
+    // Check if this is a payment-related query
+    const isPaymentRelated = isPaymentQuery(userMessage);
+    let paymentMethodsContext = '';
+    if (isPaymentRelated) {
+        paymentMethodsContext = await getPaymentMethods();
+    }
+
     // Run independent operations in PARALLEL
     const [rules, history, context, instructions] = await Promise.all([
         getBotRules(),
@@ -188,7 +244,7 @@ export async function getBotResponse(
         getBotInstructions(),
     ]);
 
-    console.log(`Parallel fetch took ${Date.now() - startTime}ms - rules: ${rules.length}, history: ${history.length}`);
+    console.log(`Parallel fetch took ${Date.now() - startTime}ms - rules: ${rules.length}, history: ${history.length}, isPaymentQuery: ${isPaymentRelated}`);
     console.log('[RAG CONTEXT]:', context ? context.substring(0, 500) + '...' : 'NO CONTEXT RETRIEVED');
 
     // Build a clear system prompt optimized for Llama 3.1
@@ -220,6 +276,19 @@ Do NOT make up prices or add details not in the reference data.
 `;
     } else {
         systemPrompt += `NOTE: No reference data available. If asked for specific prices or details, say "Ipa-check ko muna sa team."
+
+`;
+    }
+
+    // Add payment methods if this is a payment query
+    if (paymentMethodsContext) {
+        systemPrompt += `${paymentMethodsContext}
+
+INSTRUCTION FOR PAYMENT QUERIES:
+- List ALL available payment methods from above
+- Include account name and number for each
+- Be clear and helpful about how to pay
+- If they ask for QR code, tell them it's available and they can ask you to show it
 
 `;
     }

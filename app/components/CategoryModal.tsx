@@ -6,7 +6,7 @@ import { X, Check } from 'lucide-react';
 interface CategoryModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (name: string, type: 'general' | 'qa', color: string) => Promise<void>;
+    onSave: (name: string, type: 'general' | 'qa' | 'payment_method', color: string) => Promise<void>;
 }
 
 const COLORS = [
@@ -20,7 +20,7 @@ const COLORS = [
 
 export default function CategoryModal({ isOpen, onClose, onSave }: CategoryModalProps) {
     const [name, setName] = useState('');
-    const [type, setType] = useState<'general' | 'qa'>('general');
+    const [type, setType] = useState<'general' | 'qa' | 'payment_method'>('general');
     const [color, setColor] = useState('gray');
     const [saving, setSaving] = useState(false);
 
@@ -71,7 +71,7 @@ export default function CategoryModal({ isOpen, onClose, onSave }: CategoryModal
                         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
                             Type
                         </label>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-3 gap-2">
                             <button
                                 type="button"
                                 onClick={() => setType('general')}
@@ -80,7 +80,7 @@ export default function CategoryModal({ isOpen, onClose, onSave }: CategoryModal
                                     : 'border-gray-200 text-gray-600 hover:bg-gray-50'
                                     }`}
                             >
-                                General Docs
+                                General
                             </button>
                             <button
                                 type="button"
@@ -90,7 +90,17 @@ export default function CategoryModal({ isOpen, onClose, onSave }: CategoryModal
                                     : 'border-gray-200 text-gray-600 hover:bg-gray-50'
                                     }`}
                             >
-                                Q&A / FAQ
+                                Q&A
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setType('payment_method')}
+                                className={`px-3 py-2 text-sm font-medium rounded-lg border transition-all ${type === 'payment_method'
+                                    ? 'bg-teal-50 border-teal-200 text-teal-700'
+                                    : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                                    }`}
+                            >
+                                Payments
                             </button>
                         </div>
                     </div>

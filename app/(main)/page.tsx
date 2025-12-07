@@ -8,12 +8,13 @@ import DocumentEditor from "../components/DocumentEditor";
 import RulesEditor from "../components/RulesEditor";
 
 import FAQEditor from "../components/FAQEditor";
-import { FileText, Bot } from "lucide-react";
+import PaymentMethodEditor from "../components/PaymentMethodEditor";
+import { FileText, Bot, CreditCard } from "lucide-react";
 
 interface Category {
   id: string;
   name: string;
-  type: 'general' | 'qa';
+  type: 'general' | 'qa' | 'payment_method';
   color: string;
 }
 
@@ -69,6 +70,16 @@ export default function Home() {
       );
     }
 
+    // If a Payment Method category is selected, show Payment Method editor
+    if (selectedCategory?.type === 'payment_method') {
+      return (
+        <PaymentMethodEditor
+          categoryId={selectedCategory.id}
+          categoryName={selectedCategory.name}
+        />
+      );
+    }
+
     // Default: show document editor (e.g. for general categories or no category)
     return (
       <DocumentEditor
@@ -106,8 +117,12 @@ export default function Home() {
                 : 'text-gray-600 hover:bg-gray-100'
                 }`}
             >
-              <FileText size={16} />
-              {selectedCategory?.type === 'qa' ? 'FAQs' : 'Documents'}
+              {selectedCategory?.type === 'payment_method' ? (
+                <CreditCard size={16} />
+              ) : (
+                <FileText size={16} />
+              )}
+              {selectedCategory?.type === 'qa' ? 'FAQs' : selectedCategory?.type === 'payment_method' ? 'Payment Methods' : 'Documents'}
             </button>
             <button
               onClick={() => setActiveTab('rules')}

@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Search, Plus, FileText, MoreHorizontal, Folder, FolderPlus, ChevronRight, ChevronDown, Move, Trash2, X, CheckSquare, Square, Tag, HelpCircle, Edit2 } from 'lucide-react';
+import { Search, Plus, FileText, MoreHorizontal, Folder, FolderPlus, ChevronRight, ChevronDown, Move, Trash2, X, CheckSquare, Square, Tag, HelpCircle, Edit2, CreditCard } from 'lucide-react';
 import CategoryModal from './CategoryModal';
 
 interface Category {
   id: string;
   name: string;
-  type: 'general' | 'qa';
+  type: 'general' | 'qa' | 'payment_method';
   color: string;
 }
 
@@ -106,7 +106,7 @@ export default function KnowledgeBase({ onSelect, onCategorySelect, onCreateDocu
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleCreateCategory = async (name: string, type: 'general' | 'qa', color: string) => {
+  const handleCreateCategory = async (name: string, type: 'general' | 'qa' | 'payment_method', color: string) => {
     try {
       const res = await fetch('/api/categories', {
         method: 'POST',
@@ -375,6 +375,7 @@ export default function KnowledgeBase({ onSelect, onCategorySelect, onCreateDocu
                   <span className={`w-2 h-2 rounded-full ${color.bg.replace('bg-', 'bg-').replace('100', '500')}`}></span>
                   <span>{cat.name}</span>
                   {cat.type === 'qa' && <span className="px-1 py-px bg-blue-50 text-blue-600 rounded text-[10px] border border-blue-100">FAQ</span>}
+                  {cat.type === 'payment_method' && <span className="px-1 py-px bg-teal-50 text-teal-600 rounded text-[10px] border border-teal-100">Payment</span>}
                 </div>
                 <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
                   <button
