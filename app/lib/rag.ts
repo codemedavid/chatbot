@@ -33,23 +33,19 @@ async function getEmbedding(text: string, inputType: 'query' | 'passage'): Promi
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function addDocument(content: string, metadata: any = {}) {
     try {
-        // Extract categoryId from metadata if provided
         const categoryId = metadata.categoryId;
 
-        // 1. Chunk the text
         const splitter = new RecursiveCharacterTextSplitter({
             chunkSize: 1000,
             chunkOverlap: 200,
         });
         const chunks = await splitter.createDocuments([content]);
 
-        console.log(`[RAG] Adding document with ${chunks.length} chunks, categoryId: ${categoryId || 'none'}`);
+        console.log(`[RAG] Adding document with ${chunks.length} chunks`);
 
-        // 2. Generate embeddings and store in Supabase
         for (const chunk of chunks) {
             const embedding = await getEmbedding(chunk.pageContent, 'passage');
 
-            // First try with category_id (if column exists)
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const insertData: any = {
                 content: chunk.pageContent,
@@ -57,16 +53,14 @@ export async function addDocument(content: string, metadata: any = {}) {
                 embedding: embedding,
             };
 
-            // Try insert with category_id first
             if (categoryId) {
                 insertData.category_id = categoryId;
             }
 
             let { error } = await supabase.from('documents').insert(insertData);
 
-            // If category_id column doesn't exist, retry without it
+            // Retry without category_id if column doesn't exist
             if (error && error.message?.includes('category_id')) {
-                console.log('[RAG] category_id column not found, retrying without it...');
                 delete insertData.category_id;
                 const retryResult = await supabase.from('documents').insert(insertData);
                 error = retryResult.error;
@@ -77,7 +71,7 @@ export async function addDocument(content: string, metadata: any = {}) {
                 throw error;
             }
 
-            console.log(`[RAG] Inserted chunk: "${chunk.pageContent.substring(0, 50)}..."`);
+            console.log(`[RAG] Inserted: "${chunk.pageContent.substring(0, 50)}..."`);
         }
 
         return true;
@@ -88,167 +82,128 @@ export async function addDocument(content: string, metadata: any = {}) {
 }
 
 /**
- * Multi-Vector Retrieval with Query Expansion
- * 
- * Strategy:
- * 1. Original query search
- * 2. Expanded query variations (rephrased questions)
- * 3. Keyword extraction search
- * 4. Combine and dedupe results
+ * Simplified but RELIABLE retrieval
+ * Strategy: 
+ * 1. Always fetch recent documents (ensures FAQ data is always available)
+ * 2. Also do semantic search
+ * 3. Combine both for best coverage
  */
 export async function searchDocuments(query: string, limit: number = 5) {
     try {
-        console.log(`[RAG] Multi-vector search for: "${query}"`);
+        console.log(`[RAG] Searching for: "${query}"`);
 
-        // Generate embedding for the original query
-        const queryEmbedding = await getEmbedding(query, 'query');
+        // STRATEGY 1: Always get recent documents (ensures we have FAQ data)
+        const { data: recentDocs, error: recentError } = await supabase
+            .from('documents')
+            .select('id, content, metadata')
+            .order('id', { ascending: false })
+            .limit(5);
 
-        // Strategy 1: Direct semantic search with original query
-        const { data: semanticResults, error: semanticError } = await supabase.rpc('match_documents', {
-            query_embedding: queryEmbedding,
-            match_threshold: 0.30, // Lowered threshold for better recall
-            match_count: limit,
-        });
-
-        if (semanticError) {
-            console.error('Semantic search error:', semanticError);
+        if (recentError) {
+            console.error('Recent docs error:', recentError);
         }
 
-        // Strategy 2: Extract key terms and do keyword-based search
-        const keyTerms = extractKeyTerms(query);
-        let keywordResults: any[] = [];
+        // STRATEGY 2: Semantic search with embedding
+        let semanticDocs: any[] = [];
+        try {
+            const queryEmbedding = await getEmbedding(query, 'query');
 
-        if (keyTerms.length > 0) {
-            // Search for documents containing key terms
-            const { data: kwResults, error: kwError } = await supabase
-                .from('documents')
-                .select('id, content, metadata')
-                .or(keyTerms.map(term => `content.ilike.%${term}%`).join(','))
-                .limit(limit);
-
-            if (!kwError && kwResults) {
-                keywordResults = kwResults.map(doc => ({
-                    ...doc,
-                    similarity: 0.5, // Assign moderate similarity for keyword matches
-                    matchType: 'keyword'
-                }));
-            }
-        }
-
-        // Strategy 3: Question variation search (for Q&A format)
-        let qaResults: any[] = [];
-        const questionVariations = generateQuestionVariations(query);
-
-        for (const variation of questionVariations.slice(0, 2)) { // Limit to 2 variations
-            const varEmbedding = await getEmbedding(variation, 'query');
-            const { data: varResults, error: varError } = await supabase.rpc('match_documents', {
-                query_embedding: varEmbedding,
-                match_threshold: 0.30,
-                match_count: 3,
+            const { data: matchedDocs, error: matchError } = await supabase.rpc('match_documents', {
+                query_embedding: queryEmbedding,
+                match_threshold: 0.20, // Very low threshold for maximum recall
+                match_count: limit,
             });
 
-            if (!varError && varResults) {
-                qaResults.push(...varResults.map((doc: any) => ({
-                    ...doc,
-                    matchType: 'variation'
-                })));
+            if (!matchError && matchedDocs) {
+                semanticDocs = matchedDocs;
+            }
+        } catch (embError) {
+            console.error('Embedding search failed:', embError);
+        }
+
+        // STRATEGY 3: Keyword search for price-related queries
+        let keywordDocs: any[] = [];
+        const lowerQuery = query.toLowerCase();
+        const isPriceQuery = lowerQuery.includes('price') ||
+            lowerQuery.includes('cost') ||
+            lowerQuery.includes('magkano') ||
+            lowerQuery.includes('how much') ||
+            lowerQuery.includes('hm') ||
+            lowerQuery.includes('presyo');
+
+        if (isPriceQuery) {
+            const { data: priceDocs, error: priceError } = await supabase
+                .from('documents')
+                .select('id, content, metadata')
+                .or('content.ilike.%P999%,content.ilike.%price%,content.ilike.%payment%')
+                .limit(5);
+
+            if (!priceError && priceDocs) {
+                keywordDocs = priceDocs;
             }
         }
 
-        // Combine and deduplicate results
-        const allResults = [
-            ...(semanticResults || []).map((doc: any) => ({ ...doc, matchType: 'semantic' })),
-            ...keywordResults,
-            ...qaResults
-        ];
+        // Combine all results and deduplicate
+        const allDocs: any[] = [];
+        const seenIds = new Set<number>();
 
-        // Dedupe by content, keeping highest similarity
-        const seenContent = new Map<string, any>();
-        for (const doc of allResults) {
-            const existing = seenContent.get(doc.content);
-            if (!existing || (doc.similarity || 0) > (existing.similarity || 0)) {
-                seenContent.set(doc.content, doc);
+        // Add semantic results first (highest relevance)
+        for (const doc of semanticDocs) {
+            if (!seenIds.has(doc.id)) {
+                seenIds.add(doc.id);
+                allDocs.push({ ...doc, source: 'semantic' });
             }
         }
 
-        // Sort by similarity and take top results
-        const uniqueResults = Array.from(seenContent.values())
-            .sort((a, b) => (b.similarity || 0) - (a.similarity || 0))
-            .slice(0, limit);
+        // Add keyword results for price queries
+        for (const doc of keywordDocs) {
+            if (!seenIds.has(doc.id)) {
+                seenIds.add(doc.id);
+                allDocs.push({ ...doc, source: 'keyword' });
+            }
+        }
 
-        // Log results for debugging
-        console.log(`[RAG] Multi-vector search results: ${uniqueResults.length} documents`);
-        uniqueResults.forEach((doc: any, i: number) => {
-            console.log(`[RAG] Doc ${i + 1} [${doc.matchType}] sim: ${doc.similarity?.toFixed(3) || 'N/A'}, preview: ${doc.content?.substring(0, 80)}...`);
+        // Add recent docs as fallback
+        for (const doc of (recentDocs || [])) {
+            if (!seenIds.has(doc.id)) {
+                seenIds.add(doc.id);
+                allDocs.push({ ...doc, source: 'recent' });
+            }
+        }
+
+        // Log results
+        console.log(`[RAG] Found ${allDocs.length} documents`);
+        allDocs.slice(0, 5).forEach((doc, i) => {
+            console.log(`[RAG] Doc ${i + 1} [${doc.source}]: ${doc.content?.substring(0, 80)}...`);
         });
 
-        if (uniqueResults.length === 0) {
+        if (allDocs.length === 0) {
             console.log('[RAG] No documents found');
             return '';
         }
 
-        return uniqueResults.map((doc: any) => doc.content).join('\n\n');
+        // Return combined content
+        return allDocs
+            .slice(0, limit)
+            .map(doc => doc.content)
+            .join('\n\n');
+
     } catch (error) {
         console.error('Error in RAG search:', error);
+        // Last resort: just get any documents we have
+        try {
+            const { data: fallbackDocs } = await supabase
+                .from('documents')
+                .select('content')
+                .limit(3);
+
+            if (fallbackDocs && fallbackDocs.length > 0) {
+                console.log('[RAG] Using fallback - returning all docs');
+                return fallbackDocs.map(d => d.content).join('\n\n');
+            }
+        } catch (e) {
+            console.error('Fallback also failed:', e);
+        }
         return '';
     }
-}
-
-/**
- * Extract key terms from query for keyword search
- */
-function extractKeyTerms(query: string): string[] {
-    // Remove common stop words and extract meaningful terms
-    const stopWords = new Set([
-        'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-        'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should',
-        'may', 'might', 'must', 'shall', 'can', 'need', 'dare', 'ought', 'used',
-        'what', 'which', 'who', 'whom', 'this', 'that', 'these', 'those', 'am',
-        'your', 'you', 'how', 'much', 'many', 'po', 'ba', 'na', 'ng', 'sa', 'ang',
-        'yung', 'mo', 'ko', 'nyo', 'nila', 'ka', 'ako', 'siya', 'kami', 'tayo', 'sila',
-        'magkano', 'ano', 'paano', 'saan', 'kailan', 'bakit', 'ilan'
-    ]);
-
-    const words = query.toLowerCase()
-        .replace(/[^\w\s]/g, '')
-        .split(/\s+/)
-        .filter(word => word.length > 2 && !stopWords.has(word));
-
-    return [...new Set(words)].slice(0, 5); // Max 5 key terms
-}
-
-/**
- * Generate question variations for better Q&A matching
- */
-function generateQuestionVariations(query: string): string[] {
-    const variations: string[] = [];
-    const lowerQuery = query.toLowerCase();
-
-    // If asking about price
-    if (lowerQuery.includes('price') || lowerQuery.includes('cost') || lowerQuery.includes('magkano') || lowerQuery.includes('presyo')) {
-        variations.push('What is the price?');
-        variations.push('How much does it cost?');
-        variations.push('Magkano?');
-    }
-
-    // If asking about product
-    if (lowerQuery.includes('product') || lowerQuery.includes('produkto') || lowerQuery.includes('item')) {
-        variations.push('What products do you have?');
-        variations.push('Tell me about your products');
-    }
-
-    // If asking about delivery
-    if (lowerQuery.includes('deliver') || lowerQuery.includes('shipping') || lowerQuery.includes('padala')) {
-        variations.push('Do you deliver?');
-        variations.push('How much is shipping?');
-        variations.push('Nagdedeliver ba kayo?');
-    }
-
-    // If asking about payment
-    if (lowerQuery.includes('pay') || lowerQuery.includes('bayad') || lowerQuery.includes('gcash') || lowerQuery.includes('bank')) {
-        variations.push('What payment methods do you accept?');
-        variations.push('How can I pay?');
-    }
-
-    return variations;
 }

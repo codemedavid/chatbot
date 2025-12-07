@@ -6,7 +6,7 @@ import ChatPreview from "./components/ChatPreview";
 import Header from "./components/Header";
 import DocumentEditor from "./components/DocumentEditor";
 import RulesEditor from "./components/RulesEditor";
-import CategoryManager from "./components/CategoryManager";
+
 import FAQEditor from "./components/FAQEditor";
 import { FileText, Bot } from "lucide-react";
 
@@ -21,6 +21,7 @@ export default function Home() {
   const [selectedDocText, setSelectedDocText] = useState('');
   const [activeTab, setActiveTab] = useState<'documents' | 'rules'>('documents');
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
+  const [isEditingDoc, setIsEditingDoc] = useState(false);
 
   const handleSaveDocument = async (text: string, categoryId?: string) => {
     try {
@@ -35,13 +36,30 @@ export default function Home() {
     }
   };
 
+  const handleCreateDocument = () => {
+    setSelectedDocText('');
+    setSelectedCategory(null);
+    setActiveTab('documents');
+    setIsEditingDoc(true);
+  };
+
   // Determine which editor to show based on selected category
   const renderEditor = () => {
     if (activeTab === 'rules') {
       return <RulesEditor />;
     }
 
-    // If a Q&A category is selected, show FAQ editor
+    // If user explicitly selected a document, show document editor
+    if (isEditingDoc) {
+      return (
+        <DocumentEditor
+          initialText={selectedDocText}
+          onSave={(text) => handleSaveDocument(text, selectedCategory?.id)}
+        />
+      );
+    }
+
+    // If a Q&A category is selected (and not editing a doc), show FAQ editor
     if (selectedCategory?.type === 'qa') {
       return (
         <FAQEditor
@@ -51,7 +69,7 @@ export default function Home() {
       );
     }
 
-    // Default: show document editor
+    // Default: show document editor (e.g. for general categories or no category)
     return (
       <DocumentEditor
         initialText={selectedDocText}
@@ -64,15 +82,17 @@ export default function Home() {
     <div className="flex flex-col h-full">
       <Header />
       <div className="flex-1 flex overflow-hidden">
-        {/* Category Manager */}
-        <CategoryManager
-          selectedCategoryId={selectedCategory?.id || null}
-          onSelectCategory={setSelectedCategory}
-        />
-
-        {/* Knowledge Base - filtered by category */}
+        {/* Knowledge Base Sidebar */}
         <KnowledgeBase
-          onSelect={setSelectedDocText}
+          onSelect={(text: string) => {
+            setSelectedDocText(text);
+            setIsEditingDoc(true);
+          }}
+          onCategorySelect={(category: Category | null) => {
+            setSelectedCategory(category);
+            setIsEditingDoc(false);
+          }}
+          onCreateDocument={handleCreateDocument}
         />
 
         {/* Main Content Area with Tabs */}
@@ -103,6 +123,9 @@ export default function Home() {
               <span className="ml-2 text-sm text-gray-500">
                 Category: <span className="font-medium text-gray-700">{selectedCategory.name}</span>
               </span>
+            )}
+            {!selectedCategory && (
+              <span className="ml-2 text-sm text-gray-400">All Documents</span>
             )}
           </div>
 

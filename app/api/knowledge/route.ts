@@ -25,16 +25,17 @@ export async function GET() {
     return NextResponse.json(mappedData);
 }
 
+// POST - Create a new document
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        const { text } = body;
+        const { text, categoryId } = body;
 
         if (!text) {
             return NextResponse.json({ error: 'Text is required' }, { status: 400 });
         }
 
-        const success = await addDocument(text);
+        const success = await addDocument(text, { categoryId });
 
         if (!success) {
             return NextResponse.json({ error: 'Failed to process document' }, { status: 500 });

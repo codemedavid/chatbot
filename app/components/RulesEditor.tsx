@@ -126,153 +126,189 @@ export default function RulesEditor() {
     };
 
     return (
-        <div className="flex-1 bg-gray-100 flex flex-col h-full overflow-hidden">
-            <div className="h-12 bg-white border-b border-gray-200 flex items-center justify-between px-4 flex-shrink-0">
-                <div className="flex items-center gap-2">
-                    <Bot className="text-teal-600" size={18} />
-                    <span className="font-medium text-gray-700">Bot Configuration</span>
+        <div className="flex-1 bg-white flex flex-col h-full overflow-hidden font-sans">
+            {/* Header */}
+            <div className="h-16 border-b border-gray-100 flex items-center justify-between px-8 bg-white flex-shrink-0 z-10">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-teal-50 text-teal-600 rounded-xl">
+                        <Bot size={20} />
+                    </div>
+                    <span className="text-lg font-medium text-gray-900 tracking-tight">Bot Configuration</span>
                 </div>
                 <button
                     onClick={handleSaveSettings}
                     disabled={loading}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm transition-colors ${saved
-                        ? 'bg-green-600 text-white'
-                        : 'bg-teal-600 text-white hover:bg-teal-700'
+                    className={`flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-medium transition-all active:scale-95 shadow-sm ${saved
+                        ? 'bg-green-600 text-white hover:bg-green-700'
+                        : 'bg-gray-900 text-white hover:bg-black'
                         }`}
                 >
-                    <Save size={16} />
-                    {saved ? 'Saved!' : loading ? 'Saving...' : 'Save'}
+                    <Save size={18} />
+                    {saved ? 'Saved Successfully' : loading ? 'Saving...' : 'Save Changes'}
                 </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-8 flex justify-center">
-                <div className="w-full max-w-[900px] space-y-6">
-                    {/* Bot Identity */}
-                    <div className="bg-white shadow-sm border border-gray-200 rounded-lg p-6">
-                        <h3 className="font-semibold text-gray-800 mb-4">Bot Identity</h3>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-600 mb-1">Bot Name</label>
+            <div className="flex-1 overflow-y-auto bg-white p-6 md:p-8 flex justify-center">
+                <div className="w-full max-w-4xl space-y-8 pb-12">
+
+                    {/* Bot Identity Card */}
+                    <div className="bg-white rounded-[24px] p-8 border border-gray-200/60 shadow-sm hover:shadow-md transition-shadow">
+                        <h3 className="text-xl font-normal text-gray-900 mb-6 flex items-center gap-2">
+                            Bot Identity
+                        </h3>
+                        <div className="grid md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className="block text-sm font-medium text-gray-700 ml-1">Bot Name</label>
                                 <input
                                     type="text"
                                     value={botName}
                                     onChange={(e) => setBotName(e.target.value)}
                                     placeholder="e.g., WebNegosyo Assistant"
-                                    className="w-full p-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-800"
+                                    className="w-full px-4 py-3 bg-gray-50 border-gray-100 border focus:bg-white rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all placeholder:text-gray-400"
                                 />
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-600 mb-1">Tone & Personality</label>
+                            <div className="space-y-2">
+                                <label className="block text-sm font-medium text-gray-700 ml-1">Tone & Personality</label>
                                 <input
                                     type="text"
                                     value={botTone}
                                     onChange={(e) => setBotTone(e.target.value)}
                                     placeholder="e.g., Friendly, professional"
-                                    className="w-full p-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-800"
+                                    className="w-full px-4 py-3 bg-gray-50 border-gray-100 border focus:bg-white rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all placeholder:text-gray-400"
                                 />
                             </div>
                         </div>
                     </div>
 
                     {/* Human Takeover Settings */}
-                    <div className="bg-white shadow-sm border border-gray-200 rounded-lg p-6">
-                        <div className="flex items-center gap-2 mb-4">
-                            <Clock className="text-orange-500" size={18} />
-                            <h3 className="font-semibold text-gray-800">Human Takeover</h3>
+                    <div className="bg-white rounded-[24px] p-8 border border-gray-200/60 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="flex items-start gap-4 mb-6">
+                            <div className="p-3 bg-orange-50 text-orange-600 rounded-2xl">
+                                <Clock size={24} />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-medium text-gray-900">Human Takeover</h3>
+                                <p className="text-gray-500 text-sm mt-1">
+                                    When you manually reply, the AI pauses for a set duration.
+                                </p>
+                            </div>
                         </div>
-                        <p className="text-sm text-gray-500 mb-4">
-                            When you manually reply to a customer, the AI will pause for this duration before resuming.
-                        </p>
-                        <div className="flex items-center gap-3">
+
+                        <div className="flex items-center gap-4 bg-gray-50 p-4 rounded-2xl border border-gray-100 max-w-md">
                             <input
                                 type="number"
                                 min="1"
                                 max="60"
                                 value={humanTakeoverTimeout}
                                 onChange={(e) => setHumanTakeoverTimeout(Math.max(1, Math.min(60, parseInt(e.target.value) || 5)))}
-                                className="w-20 p-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-800 text-center"
+                                className="w-20 px-4 py-2 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 text-gray-900 text-center font-medium bg-white"
                             />
-                            <span className="text-sm text-gray-600">minutes before AI resumes</span>
+                            <span className="text-gray-700 font-medium">minutes before AI resumes</span>
                         </div>
                     </div>
 
                     {/* Conversation Style Instructions */}
-                    <div className="bg-white shadow-sm border border-gray-200 rounded-lg p-6">
-                        <h3 className="font-semibold text-gray-800 mb-2">Conversation Style Instructions</h3>
-                        <p className="text-sm text-gray-500 mb-4">Control how the bot converses - tone, what to avoid, examples of good/bad responses</p>
-                        <textarea
-                            value={instructions}
-                            onChange={(e) => setInstructions(e.target.value)}
-                            placeholder="E.g., Talk like a real Filipino salesperson texting, not a script. NO multiple choice questions...)"
-                            className="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-800 font-mono text-sm"
-                            rows={12}
-                        />
+                    <div className="bg-white rounded-[24px] p-8 border border-gray-200/60 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="mb-6">
+                            <h3 className="text-xl font-normal text-gray-900 mb-2">Conversation Style Instructions</h3>
+                            <p className="text-gray-500 text-sm">Define how the bot should converse, including tone and specific dos/don'ts.</p>
+                        </div>
+                        <div className="relative">
+                            <textarea
+                                value={instructions}
+                                onChange={(e) => setInstructions(e.target.value)}
+                                placeholder="E.g., Talk like a real Filipino salesperson texting, not a script. NO multiple choice questions..."
+                                className="w-full p-6 bg-yellow-50/30 border border-yellow-200/50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-yellow-400/20 focus:border-yellow-400 transition-all text-gray-800 font-mono text-sm leading-relaxed resize-y min-h-[200px]"
+                            />
+                            <div className="absolute top-4 right-4 text-xs font-medium text-yellow-600/50 bg-yellow-100/50 px-2 py-1 rounded">
+                                SYSTEM PROMPT
+                            </div>
+                        </div>
                     </div>
 
                     {/* Rules Table */}
-                    <div className="bg-white shadow-sm border border-gray-200 rounded-lg overflow-hidden">
-                        <div className="p-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-                            <h3 className="font-semibold text-gray-800">Bot Rules</h3>
-                            <span className="text-sm text-gray-500">{rules.filter(r => r.enabled).length} active rules</span>
+                    <div className="bg-white rounded-[24px] border border-gray-200/60 shadow-sm hover:shadow-md transition-shadow overflow-hidden">
+                        <div className="p-6 border-b border-gray-100 bg-white flex items-center justify-between">
+                            <div>
+                                <h3 className="text-xl font-normal text-gray-900">Bot Rules</h3>
+                                <p className="text-sm text-gray-400 mt-1">Specific rules checked before every response</p>
+                            </div>
+                            <span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-xs font-semibold tracking-wide">
+                                {rules.filter(r => r.enabled).length} ACTIVE
+                            </span>
                         </div>
 
                         {/* Add New Rule */}
-                        <div className="p-4 border-b border-gray-100 flex gap-2">
-                            <input
-                                type="text"
-                                value={newRule}
-                                onChange={(e) => setNewRule(e.target.value)}
-                                placeholder="Add a new rule... (e.g., Always greet customers warmly)"
-                                className="flex-1 p-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-800"
-                                onKeyDown={(e) => e.key === 'Enter' && handleAddRule()}
-                            />
-                            <button
-                                onClick={handleAddRule}
-                                className="px-4 py-2.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 flex items-center gap-2"
-                            >
-                                <Plus size={16} />
-                                Add Rule
-                            </button>
+                        <div className="p-6 bg-gray-50/50 border-b border-gray-100">
+                            <div className="flex gap-3">
+                                <input
+                                    type="text"
+                                    value={newRule}
+                                    onChange={(e) => setNewRule(e.target.value)}
+                                    placeholder="Type a new rule... (e.g., Never mention competitors)"
+                                    className="flex-1 px-5 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-gray-900 bg-white shadow-sm transition-all"
+                                    onKeyDown={(e) => e.key === 'Enter' && handleAddRule()}
+                                />
+                                <button
+                                    onClick={handleAddRule}
+                                    className="px-6 py-3 bg-teal-600 text-white rounded-xl hover:bg-teal-700 hover:shadow-lg transition-all active:scale-95 flex items-center gap-2 font-medium"
+                                >
+                                    <Plus size={20} />
+                                    Add
+                                </button>
+                            </div>
                         </div>
 
                         {/* Rules List */}
-                        <div className="divide-y divide-gray-100">
+                        <div className="divide-y divide-gray-50">
                             {rules.length === 0 ? (
-                                <div className="p-8 text-center text-gray-500">
-                                    No rules added yet. Add rules above to control your bot&apos;s behavior.
+                                <div className="p-12 text-center">
+                                    <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <Bot size={24} className="text-gray-300" />
+                                    </div>
+                                    <p className="text-gray-500 font-medium">No rules added yet</p>
+                                    <p className="text-sm text-gray-400 mt-1">Add rules above to guide your bot's behavior.</p>
                                 </div>
                             ) : (
                                 rules.map((rule, index) => (
                                     <div
                                         key={rule.id}
-                                        className={`flex items-center gap-3 p-4 hover:bg-gray-50 ${!rule.enabled ? 'opacity-50' : ''
+                                        className={`group flex items-center gap-4 p-5 hover:bg-gray-50 transition-colors ${!rule.enabled ? 'opacity-60 bg-gray-50/50' : 'bg-white'
                                             }`}
                                     >
-                                        <GripVertical size={16} className="text-gray-400 cursor-grab" />
-                                        <span className="text-sm text-gray-400 w-6">{index + 1}.</span>
-                                        <p className="flex-1 text-gray-700">{rule.rule}</p>
-                                        <button
-                                            onClick={() => handleToggleRule(rule.id, rule.enabled)}
-                                            className={`p-1 rounded ${rule.enabled ? 'text-teal-600' : 'text-gray-400'}`}
-                                            title={rule.enabled ? 'Disable rule' : 'Enable rule'}
-                                        >
-                                            {rule.enabled ? <ToggleRight size={24} /> : <ToggleLeft size={24} />}
-                                        </button>
-                                        <button
-                                            onClick={() => handleDeleteRule(rule.id)}
-                                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
+                                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 text-gray-400 text-xs font-bold">
+                                            {index + 1}
+                                        </div>
+
+                                        <div className="flex-1 min-w-0">
+                                            <p className={`text-base ${rule.enabled ? 'text-gray-900' : 'text-gray-500 line-through'}`}>
+                                                {rule.rule}
+                                            </p>
+                                        </div>
+
+                                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button
+                                                onClick={() => handleToggleRule(rule.id, rule.enabled)}
+                                                className={`p-2 rounded-lg transition-colors ${rule.enabled
+                                                    ? 'text-teal-600 bg-teal-50 hover:bg-teal-100'
+                                                    : 'text-gray-400 bg-gray-100 hover:bg-gray-200'
+                                                    }`}
+                                                title={rule.enabled ? 'Disable rule' : 'Enable rule'}
+                                            >
+                                                {rule.enabled ? <ToggleRight size={22} /> : <ToggleLeft size={22} />}
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeleteRule(rule.id)}
+                                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
+                                        </div>
                                     </div>
                                 ))
                             )}
                         </div>
                     </div>
-
-                    <p className="text-sm text-gray-500 text-center">
-                        The bot will check these rules before every response. Disabled rules are ignored.
-                    </p>
                 </div>
             </div>
         </div>

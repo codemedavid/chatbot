@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Bot, Send, Paperclip } from 'lucide-react';
+import { Bot, Send, Paperclip, RotateCcw } from 'lucide-react';
 
 interface Message {
     role: 'user' | 'bot';
@@ -17,16 +17,12 @@ export default function ChatPreview() {
     const [sessionId, setSessionId] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    // Initialize session ID from localStorage or generate new one
+    // Generate a NEW session ID each time the component mounts
+    // This prevents old conversation history from affecting new chats
     useEffect(() => {
-        const stored = localStorage.getItem('chat_session_id');
-        if (stored) {
-            setSessionId(stored);
-        } else {
-            const newId = `web_${Date.now()}`;
-            localStorage.setItem('chat_session_id', newId);
-            setSessionId(newId);
-        }
+        const newId = `web_test_${Date.now()}`;
+        setSessionId(newId);
+        console.log('[ChatPreview] New test session:', newId);
     }, []);
 
     const scrollToBottom = () => {
@@ -36,6 +32,16 @@ export default function ChatPreview() {
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
+
+    // Clear chat and start fresh
+    const handleClearChat = () => {
+        const newId = `web_test_${Date.now()}`;
+        setSessionId(newId);
+        setMessages([
+            { role: 'bot', content: "Chat cleared! I'm ready for fresh questions. 😊" }
+        ]);
+        console.log('[ChatPreview] Chat cleared, new session:', newId);
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -58,7 +64,6 @@ export default function ChatPreview() {
 
             // Store session ID if returned
             if (data.sessionId && !sessionId) {
-                localStorage.setItem('chat_session_id', data.sessionId);
                 setSessionId(data.sessionId);
             }
         } catch (error) {
@@ -74,7 +79,14 @@ export default function ChatPreview() {
         <div className="w-96 bg-white border-l border-gray-200 flex flex-col h-full flex-shrink-0">
             <div className="p-4 border-b border-gray-100 flex items-center gap-2">
                 <Bot className="text-teal-600" size={20} />
-                <h2 className="font-semibold text-gray-800">TestBot</h2>
+                <h2 className="font-semibold text-gray-800 flex-1">TestBot</h2>
+                <button
+                    onClick={handleClearChat}
+                    className="p-1.5 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded-full transition-colors"
+                    title="Clear chat & start fresh"
+                >
+                    <RotateCcw size={16} />
+                </button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-6 bg-gray-50/50">

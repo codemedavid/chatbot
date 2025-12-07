@@ -136,123 +136,160 @@ function SettingsContent() {
     };
 
     return (
-        <div className="max-w-4xl mx-auto p-8 space-y-8">
-            <div className="flex items-center gap-4">
-                <Link href="/" className="p-2 hover:bg-gray-100 rounded-full text-gray-600">
-                    <ArrowLeft size={24} />
-                </Link>
-                <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
-            </div>
-
-            {/* Message Display */}
-            {message && (
-                <div className={`p-4 rounded-lg text-sm ${message.includes('success') || message.includes('Connected') ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
-                    {message}
+        <div className="min-h-screen bg-white font-sans">
+            <div className="max-w-5xl mx-auto p-8 lg:p-12 space-y-12">
+                {/* Header Section */}
+                <div className="flex items-center gap-6">
+                    <Link
+                        href="/"
+                        className="p-3 hover:bg-gray-50 rounded-full text-gray-400 hover:text-gray-900 transition-colors"
+                        aria-label="Go back"
+                    >
+                        <ArrowLeft size={24} />
+                    </Link>
+                    <div>
+                        <h1 className="text-4xl font-light text-gray-900 tracking-tight">Settings</h1>
+                        <p className="text-gray-500 mt-2 text-lg font-light">Manage your connected accounts</p>
+                    </div>
                 </div>
-            )}
 
-            {/* Facebook Connection Section */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                <div className="p-6 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <Facebook className="text-blue-600" size={24} />
+                {/* Message Display */}
+                {message && (
+                    <div className={`p-4 rounded-xl text-sm flex items-center gap-3 animate-in fade-in slide-in-from-top-4 ${message.includes('success') || message.includes('Connected')
+                        ? 'bg-green-50 text-green-800'
+                        : 'bg-red-50 text-red-800'
+                        }`}>
+                        {message.includes('success') || message.includes('Connected') ? (
+                            <CheckCircle size={20} />
+                        ) : (
+                            <AlertCircle size={20} />
+                        )}
+                        {message}
+                    </div>
+                )}
+
+                {/* Facebook Connection Card */}
+                <div className="space-y-6">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                        <div className="flex items-start gap-5">
+                            <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl">
+                                <Facebook size={32} />
+                            </div>
                             <div>
-                                <h2 className="text-xl font-semibold text-gray-800">Facebook Pages</h2>
-                                <p className="text-sm text-gray-500 mt-1">Connect your Facebook pages to enable messaging</p>
+                                <h2 className="text-2xl font-normal text-gray-900">Facebook Pages</h2>
+                                <p className="text-gray-500 mt-1 text-base font-light">
+                                    Connect your pages to enable AI messaging automation
+                                </p>
                             </div>
                         </div>
                         <button
                             onClick={handleFacebookLogin}
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm"
+                            className="flex items-center gap-2 px-8 py-3 bg-gray-900 text-white rounded-full hover:bg-black hover:shadow-lg transition-all font-medium text-sm tracking-wide active:scale-95"
                         >
                             <Facebook size={18} />
-                            Connect with Facebook
+                            Connect New Page
                         </button>
+                    </div>
+
+                    {/* Connected Pages List */}
+                    <div className="space-y-4">
+                        {loadingPages ? (
+                            <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                                <Loader2 className="animate-spin mb-3" size={24} />
+                                <span className="font-light text-sm">Loading your pages...</span>
+                            </div>
+                        ) : connectedPages.length === 0 ? (
+                            <div className="text-center py-16 px-4 bg-gray-50/50 rounded-[32px] border border-dashed border-gray-200">
+                                <div className="bg-white p-4 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4 shadow-sm border border-gray-100">
+                                    <Facebook size={24} className="text-gray-300" />
+                                </div>
+                                <h3 className="text-gray-900 font-medium mb-1">No pages connected</h3>
+                                <p className="text-gray-500 text-sm max-w-sm mx-auto font-light">
+                                    Link your Facebook pages to start automating replies.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="grid gap-4">
+                                {connectedPages.map((page) => (
+                                    <div
+                                        key={page.id}
+                                        className="group flex flex-col sm:flex-row items-start sm:items-center gap-6 p-6 bg-white border border-gray-100 rounded-[24px] hover:shadow-lg transition-all duration-300 hover:border-gray-200"
+                                    >
+                                        {/* Page Picture */}
+                                        <div className="relative">
+                                            {page.profile_pic ? (
+                                                <img
+                                                    src={page.profile_pic}
+                                                    alt={page.page_name}
+                                                    className="w-16 h-16 rounded-2xl object-cover shadow-sm bg-gray-50"
+                                                />
+                                            ) : (
+                                                <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center">
+                                                    <span className="text-xl font-bold text-gray-400">
+                                                        {page.page_name.charAt(0).toUpperCase()}
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {page.is_active && (
+                                                <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 border-4 border-white rounded-full"></div>
+                                            )}
+                                        </div>
+
+                                        {/* Page Info */}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <h3 className="font-semibold text-gray-900 text-xl truncate tracking-tight">
+                                                    {page.page_name}
+                                                </h3>
+                                                <span className="px-2 py-1 bg-gray-100 text-gray-500 text-xs rounded-md font-mono">
+                                                    {page.page_id}
+                                                </span>
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-3">
+                                                {page.webhook_subscribed ? (
+                                                    <span className="inline-flex items-center gap-1.5 text-sm text-green-700 font-medium">
+                                                        <CheckCircle size={16} className="text-green-600" />
+                                                        Active & Synced
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1.5 text-sm text-amber-700 font-medium">
+                                                        <AlertCircle size={16} className="text-amber-600" />
+                                                        Setup Incomplete
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Actions */}
+                                        <div className="flex items-center gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                                            <button
+                                                onClick={() => handleDisconnectPage(page.page_id, page.page_name)}
+                                                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-3 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-all text-sm font-medium"
+                                            >
+                                                <Trash2 size={18} />
+                                                <span className="sm:hidden">Disconnect</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
 
-                <div className="p-6">
-                    {/* Connected Pages List */}
-                    {loadingPages ? (
-                        <div className="flex items-center justify-center py-8 text-gray-500">
-                            <Loader2 className="animate-spin mr-2" size={20} />
-                            Loading connected pages...
-                        </div>
-                    ) : connectedPages.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500">
-                            <Facebook size={48} className="mx-auto mb-4 opacity-30" />
-                            <p className="font-medium">No pages connected yet</p>
-                            <p className="text-sm mt-1">Click &quot;Connect with Facebook&quot; to get started</p>
-                        </div>
-                    ) : (
-                        <div className="space-y-3">
-                            {connectedPages.map((page) => (
-                                <div
-                                    key={page.id}
-                                    className="flex items-center gap-4 p-4 bg-gray-50 rounded-xl border border-gray-100"
-                                >
-                                    {/* Page Picture */}
-                                    {page.profile_pic ? (
-                                        <img
-                                            src={page.profile_pic}
-                                            alt={page.page_name}
-                                            className="w-12 h-12 rounded-full object-cover"
-                                        />
-                                    ) : (
-                                        <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center">
-                                            <span className="text-lg font-bold text-gray-500">
-                                                {page.page_name.charAt(0).toUpperCase()}
-                                            </span>
-                                        </div>
-                                    )}
-
-                                    {/* Page Info */}
-                                    <div className="flex-1">
-                                        <p className="font-semibold text-gray-900">{page.page_name}</p>
-                                        <div className="flex items-center gap-3 mt-1">
-                                            <span className="text-xs text-gray-500">ID: {page.page_id}</span>
-                                            {page.webhook_subscribed ? (
-                                                <span className="inline-flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
-                                                    <CheckCircle size={12} />
-                                                    Webhook active
-                                                </span>
-                                            ) : (
-                                                <span className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-                                                    <AlertCircle size={12} />
-                                                    Webhook pending
-                                                </span>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Disconnect Button */}
-                                    <button
-                                        onClick={() => handleDisconnectPage(page.page_id, page.page_name)}
-                                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                        title="Disconnect page"
-                                    >
-                                        <Trash2 size={18} />
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
+                {/* Page Selector Modal */}
+                {showPageSelector && (
+                    <PageSelector
+                        pages={availablePages}
+                        onConnect={handleConnectPages}
+                        onClose={() => {
+                            setShowPageSelector(false);
+                            setAvailablePages([]);
+                            window.history.replaceState({}, '', '/settings');
+                        }}
+                    />
+                )}
             </div>
-
-            {/* Page Selector Modal */}
-            {showPageSelector && (
-                <PageSelector
-                    pages={availablePages}
-                    onConnect={handleConnectPages}
-                    onClose={() => {
-                        setShowPageSelector(false);
-                        setAvailablePages([]);
-                        window.history.replaceState({}, '', '/settings');
-                    }}
-                />
-            )}
         </div>
     );
 }

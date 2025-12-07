@@ -6,7 +6,7 @@ export async function GET() {
     try {
         const { data, error } = await supabase
             .from('document_folders')
-            .select('id, name, created_at')
+            .select('id, name, created_at, category_id')
             .order('created_at', { ascending: true });
 
         if (error) {
@@ -18,6 +18,7 @@ export async function GET() {
         const folders = data.map((folder: any) => ({
             id: folder.id,
             name: folder.name,
+            categoryId: folder.category_id,
             isOpen: true,
         }));
 
@@ -31,7 +32,7 @@ export async function GET() {
 // POST - Create a new folder
 export async function POST(req: Request) {
     try {
-        const { name } = await req.json();
+        const { name, categoryId } = await req.json();
 
         if (!name || !name.trim()) {
             return NextResponse.json({ error: 'Folder name is required' }, { status: 400 });
@@ -39,7 +40,10 @@ export async function POST(req: Request) {
 
         const { data, error } = await supabase
             .from('document_folders')
-            .insert({ name: name.trim() })
+            .insert({
+                name: name.trim(),
+                category_id: categoryId || null
+            })
             .select()
             .single();
 
@@ -51,6 +55,7 @@ export async function POST(req: Request) {
         return NextResponse.json({
             id: data.id,
             name: data.name,
+            categoryId: data.category_id,
             isOpen: true,
         }, { status: 201 });
     } catch (error) {

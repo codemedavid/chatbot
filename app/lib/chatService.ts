@@ -177,15 +177,10 @@ export async function getBotResponse(userMessage: string, senderId: string = 'we
     console.log(`Parallel fetch took ${Date.now() - startTime}ms - rules: ${rules.length}, history: ${history.length}`);
     console.log('[RAG CONTEXT]:', context ? context.substring(0, 500) + '...' : 'NO CONTEXT RETRIEVED');
 
-    // Build a natural conversation-focused system prompt
-    let systemPrompt = `You are ${botName}, a friendly Filipino salesperson chatting with a customer via text message. Your personality: ${botTone}.
+    // Build a clear system prompt optimized for Llama 3.1
+    let systemPrompt = `You are ${botName}, a friendly Filipino salesperson. Your style: ${botTone}.
 
-CONVERSATION STYLE:
-- Be natural, warm, and conversational like a real salesperson
-- Use Taglish (mix of Tagalog and English) naturally
-- Use emojis sparingly (1-2 per message max)
-- Keep responses concise - this is texting, not email
-- Be helpful and proactive in offering information
+STYLE: Use Taglish, keep messages short, use 1-2 emojis max.
 
 `;
 
@@ -197,31 +192,20 @@ CONVERSATION STYLE:
     }
 
     if (rules.length > 0) {
-        systemPrompt += `BUSINESS RULES:\n${rules.join('\n')}\n\n`;
+        systemPrompt += `RULES:\n${rules.join('\n')}\n\n`;
     }
 
-    // Balanced grounding - strict for facts, flexible for conversation
-    systemPrompt += `GROUNDING GUIDELINES:
+    // Add knowledge base FIRST with clear instruction
+    if (context && context.trim().length > 0) {
+        systemPrompt += `REFERENCE DATA:
+${context}
 
-For SPECIFIC FACTS (prices, features, availability, business details):
-- USE the information in KNOWLEDGE BASE if available
-- If asked about specific details NOT in the knowledge base, honestly say you need to check with the team
-- DO NOT make up specific numbers, prices, or features
-
-For GENERAL CONVERSATION (greetings, follow-ups, questions):
-- Be natural and helpful
-- You CAN engage in normal conversation
-- Guide customers toward your products/services
+IMPORTANT: When asked about price/magkano/cost, use the EXACT price above (P999 One Time Payment).
+Do NOT make up prices or add details not in the reference data.
 
 `;
-
-    // Add knowledge base context - only if we have content
-    if (context && context.trim().length > 0) {
-        systemPrompt += `=== KNOWLEDGE BASE ===
-${context}
-=== END KNOWLEDGE BASE ===
-
-Use the above information to answer questions about products, prices, and services.
+    } else {
+        systemPrompt += `NOTE: No reference data available. If asked for specific prices or details, say "Ipa-check ko muna sa team."
 
 `;
     }
@@ -245,14 +229,14 @@ Use the above information to answer questions about products, prices, and servic
     try {
         const llmStart = Date.now();
 
-        // Use Qwen3-235b with balanced settings
+        // Use Qwen3-235b model
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const stream: any = await client.chat.completions.create({
             model: "qwen/qwen3-235b-a22b",
             messages,
-            temperature: 0.6,  // Balanced - not too creative, not too rigid
-            top_p: 0.85,       // Allow more variety
-            max_tokens: 1024,  // Shorter responses for chat
+            temperature: 0.3,  // Low for accuracy
+            top_p: 0.7,
+            max_tokens: 1024,
             stream: true,
         });
 
@@ -275,7 +259,7 @@ Use the above information to answer questions about products, prices, and servic
             }
         }
 
-        console.log(`LLM call took ${Date.now() - llmStart}ms`);
+        console.log(`LLM call took ${Date.now() - llmStart} ms`);
         if (reasoningContent) {
             console.log('Reasoning:', reasoningContent.substring(0, 200) + '...');
         }
@@ -291,7 +275,7 @@ Use the above information to answer questions about products, prices, and servic
         // Store bot response (fire and forget)
         storeMessageAsync(senderId, 'assistant', responseContent);
 
-        console.log(`Total response time: ${Date.now() - startTime}ms`);
+        console.log(`Total response time: ${Date.now() - startTime} ms`);
         return responseContent;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
