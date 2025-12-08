@@ -164,7 +164,7 @@ async function sendProductCards(sender_psid: string, products: Product[], pageId
     const PAGE_ACCESS_TOKEN = await getPageToken(pageId);
     if (!PAGE_ACCESS_TOKEN || products.length === 0) return false;
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://aphelion-photon.vercel.app'; // Fallback needs to be actual URL
+    const appUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://aphelion-photon.vercel.app'; // Fallback needs to be actual URL
 
     // Build elements for Generic Template (max 10)
     const elements = products.slice(0, 10).map(product => {
