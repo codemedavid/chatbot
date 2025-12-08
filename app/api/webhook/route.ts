@@ -395,6 +395,46 @@ export async function POST(req: Request) {
 
                 const sender_psid = webhook_event.sender?.id;
                 const recipient_psid = webhook_event.recipient?.id;
+
+                // --- NEW: Handle Referral (m.me links with ref param) ---
+                if (webhook_event.referral) {
+                    console.log('Referral event received:', webhook_event.referral);
+                    waitUntil(
+                        handleReferral(sender_psid, webhook_event.referral, recipient_psid).catch(err => {
+                            console.error('Error handling referral:', err);
+                        })
+                    );
+                    continue;
+                }
+
+                // --- NEW: Handle Postback (Get Started button or Menu) ---
+                if (webhook_event.postback) {
+                    console.log('Postback event received:', webhook_event.postback);
+                    // Check if postback has referral data (Get Started with ref)
+                    const referral = webhook_event.postback.referral;
+                    if (referral) {
+                        console.log('Postback has referral:', referral);
+                        waitUntil(
+                            handleReferral(sender_psid, referral, recipient_psid).catch(err => {
+                                console.error('Error handling postback referral:', err);
+                            })
+                        );
+                        continue;
+                    }
+
+                    // Handle other postbacks if needed (e.g. standard Get Started without ref)
+                    // limit to PAY_ for now as per existing logic, or extend
+                    if (webhook_event.postback.payload && webhook_event.postback.payload.startsWith('PAY_')) {
+                        // ... existing payment postback logic could go here if separated ...
+                        // For now, let's just log it. The original code didn't seem to have a dedicated postback handler called here?
+                        // Ah, looking at the original code, postbacks fell through or were ignored?
+                        // Let's explicitly handle PAY_ payloads or valid text fallbacks.
+                        console.log('Payment postback received:', webhook_event.postback.payload);
+                        // TODO: Implement specific payment postback handling if not handled by text logic
+                    }
+                }
+
+
                 const messageId = webhook_event.message?.mid;
 
                 // Skip if already processed (prevents duplicate responses)
@@ -475,6 +515,45 @@ export async function POST(req: Request) {
     } catch (error) {
         console.error('Webhook error:', error);
         return new NextResponse('Internal Server Error', { status: 500 });
+    }
+}
+
+// Handle Referral Events (Chat to Buy)
+async function handleReferral(sender_psid: string, referral: any, pageId?: string) {
+    const ref = referral.ref; // e.g., "p_id:123|vars:Size-M,Color-Red"
+    if (!ref) return;
+
+    console.log('Handling referral ref:', ref);
+
+    // Parse ref
+    const params = new URLSearchParams(ref.replace(/\|/g, '&').replace(/:/g, '='));
+    const productId = params.get('p_id');
+    const varsString = params.get('vars');
+
+    if (productId) {
+        // Get the product details
+        const { data: product, error } = await supabase
+            .from('products')
+            .select('*')
+            .eq('id', productId)
+            .single();
+
+        if (product && !error) {
+            const variationText = varsString ? `\nSelected Options: ${varsString.split(',').join(', ')}` : '';
+
+            // Send welcome message with product context
+            await callSendAPI(sender_psid, {
+                text: `Hi! 👋 I see you're interested in ${product.name}.${variationText}\n\nHow can we help you with your purchase today?`
+            }, pageId);
+
+            // Send the product card again for easy access
+            await sendProductCards(sender_psid, [product], pageId);
+        } else {
+            console.error('Referral product not found:', productId);
+            await callSendAPI(sender_psid, {
+                text: "Hi! Thanks for messaging us. How can we help you today?"
+            }, pageId);
+        }
     }
 }
 
