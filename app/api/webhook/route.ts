@@ -98,6 +98,13 @@ const PRODUCT_KEYWORDS = [
     'store', 'shop', 'katalogo', 'catalogue', 'menu', 'list', 'available'
 ];
 
+// Property-related keywords
+const PROPERTY_KEYWORDS = [
+    'property', 'properties', 'house', 'bahay', 'lupa', 'lot', 'condo',
+    'apartment', 'rent', 'sale', 'studio', 'bedroom', 'model', 'townhouse',
+    'investment', 'preselling', 'reopen', 'inventory', 'available'
+];
+
 // Check if message is asking about products
 function isProductQuery(message: string): boolean {
     const lowerMessage = message.toLowerCase();
@@ -107,6 +114,17 @@ function isProductQuery(message: string): boolean {
     if (lowerMessage.includes('available') && (lowerMessage.includes('ba') || lowerMessage.includes('kayo'))) return true;
 
     return PRODUCT_KEYWORDS.some(keyword => lowerMessage.includes(keyword));
+}
+
+// Check if message is asking about properties
+function isPropertyQuery(message: string): boolean {
+    const lowerMessage = message.toLowerCase();
+
+    // Check for "anong property meron" or "house and lot" patterns
+    if (lowerMessage.includes('house') && lowerMessage.includes('lot')) return true;
+    if (lowerMessage.includes('property') && lowerMessage.includes('list')) return true;
+
+    return PROPERTY_KEYWORDS.some(keyword => lowerMessage.includes(keyword));
 }
 
 // Check if message is asking about payment methods
@@ -133,7 +151,19 @@ interface Product {
     description: string | null;
     price: number | null;
     image_url: string | null;
-    currency: string;
+    is_active: boolean;
+}
+
+interface Property {
+    id: string;
+    title: string;
+    description: string | null;
+    price: number | null;
+    image_url: string | null;
+    address: string | null;
+    bedrooms: number | null;
+    bathrooms: number | null;
+    status: string;
     is_active: boolean;
 }
 
@@ -157,6 +187,30 @@ async function getProducts(): Promise<Product[]> {
         console.error('Error fetching products:', error);
         return [];
     }
+}
+
+// Fetch active properties from database
+async function getProperties(): Promise<Property[]> {
+    try {
+        const { data, error } = await supabase
+            .from('properties')
+            .select('*')
+            .eq('is_active', true)
+            .order('created_at', { ascending: false })
+            .limit(10); // Limit to 10 for carousel
+
+        if (error || !data) {
+            console.log('No properties found or error:', error);
+            return [];
+        }
+
+        return data; // Supabase returns generic types, casting happens at consumption or strictly here if needed
+    } catch (error) {
+        console.error('Error fetching properties:', error);
+        return [];
+    }
+}
+
 }
 
 // Send products as Facebook Generic Template cards
@@ -243,6 +297,98 @@ async function sendProductCards(sender_psid: string, products: Product[], pageId
         return false;
     }
 }
+
+// Send properties as Facebook Generic Template cards
+async function sendPropertyCards(sender_psid: string, properties: Property[], pageId?: string) {
+    const PAGE_ACCESS_TOKEN = await getPageToken(pageId);
+    if (!PAGE_ACCESS_TOKEN || properties.length === 0) return false;
+
+    const appUrl = process.env.NEXT_PUBLIC_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://aphelion-photon.vercel.app';
+
+    // Build elements for Generic Template (max 10)
+    const elements = properties.slice(0, 10).map(property => {
+        const priceFormatted = property.price
+            ? `₱${property.price.toLocaleString('en-PH', { maximumFractionDigits: 0 })}`
+            : 'Price upon request';
+
+        // Subtitle: Address + Beds/Baths
+        const details = [
+            property.address,
+            property.bedrooms ? `${property.bedrooms} Beds` : null,
+            property.bathrooms ? `${property.bathrooms} Baths` : null
+        ].filter(Boolean).join(' • ');
+
+        let subtitle = `${priceFormatted}`;
+        if (details) subtitle += `\n${details}`;
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const element: any = {
+            title: property.title,
+            subtitle: subtitle,
+        };
+
+        // Add image if available
+        if (property.image_url) {
+            element.image_url = property.image_url;
+        }
+
+        // Add buttons
+        element.buttons = [
+            {
+                type: 'web_url',
+                url: `${appUrl}/property/${property.id}`,
+                title: 'View Details',
+                webview_height_ratio: 'tall'
+            },
+            {
+                type: 'postback',
+                title: '💬 Inquire',
+                payload: `INQUIRE_PROP_${property.id}`
+            }
+        ];
+
+        return element;
+    });
+
+    const requestBody = {
+        recipient: { id: sender_psid },
+        message: {
+            attachment: {
+                type: 'template',
+                payload: {
+                    template_type: 'generic',
+                    elements: elements
+                }
+            }
+        }
+    };
+
+    console.log('Sending property cards:', JSON.stringify(requestBody, null, 2));
+
+    try {
+        const res = await fetch(
+            `https://graph.facebook.com/v21.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody),
+            }
+        );
+
+        const resData = await res.json();
+        if (!res.ok) {
+            console.error('Failed to send property cards:', resData);
+            return false;
+        }
+
+        console.log('Property cards sent successfully');
+        return true;
+    } catch (error) {
+        console.error('Error sending property cards:', error);
+        return false;
+    }
+}
+
 
 // Fetch active payment methods from database
 async function getPaymentMethods(): Promise<PaymentMethod[]> {
@@ -432,6 +578,27 @@ export async function POST(req: Request) {
                         console.log('Payment postback received:', webhook_event.postback.payload);
                         // TODO: Implement specific payment postback handling if not handled by text logic
                     }
+
+                    // Handle Property Inquiry Postback
+                    if (webhook_event.postback.payload && webhook_event.postback.payload.startsWith('INQUIRE_PROP_')) {
+                        const propId = webhook_event.postback.payload.replace('INQUIRE_PROP_', '');
+                        console.log('Property Inquiry Postback:', propId);
+
+                        // Fetch property details to give context
+                        const { data: prop } = await supabase.from('properties').select('title, price').eq('id', propId).single();
+
+                        const msg = prop
+                            ? `I'm interested in "${prop.title}". Is this still available?`
+                            : "I'm interested in this property. Is it available?";
+
+                        // Send automated response
+                        await callSendAPI(sender_psid, {
+                            text: `Thanks for your interest in ${prop?.title || 'this property'}! An agent will be with you shortly to assist you.`
+                        }, pageId ? pageId.toString() : undefined);
+
+                        // We could also notify the agent here via pipeline/lead update
+                        continue;
+                    }
                 }
 
 
@@ -606,6 +773,26 @@ async function handleMessage(sender_psid: string, received_message: string, page
 
                 // Send product cards
                 const cardsSent = await sendProductCards(sender_psid, products, pageId);
+
+                if (cardsSent) {
+                    return; // Don't send AI response, cards are enough
+                }
+            }
+        }
+
+        // Check if this is a PROPERTY-related query
+        if (isPropertyQuery(received_message)) {
+            console.log('Property query detected, fetching properties...');
+            const properties = await getProperties();
+
+            if (properties.length > 0) {
+                // Send intro message first
+                await callSendAPI(sender_psid, {
+                    text: 'Here are our latest properties for you! 🏠 Click to view details:'
+                }, pageId);
+
+                // Send property cards
+                const cardsSent = await sendPropertyCards(sender_psid, properties, pageId);
 
                 if (cardsSent) {
                     return; // Don't send AI response, cards are enough

@@ -636,3 +636,68 @@ CREATE TRIGGER update_product_variations_updated_at
 -- 16. products - Store products with pricing
 -- 17. product_variation_types - Variation types (Size, Color, etc.)
 -- 18. product_variations - Product-specific variations with prices
+
+
+-- -----------------------------------------------------------------------------
+-- STORE SETUP & REAL ESTATE (Added Dec 2024)
+-- -----------------------------------------------------------------------------
+
+-- 19. store_settings - Store configuration and type
+CREATE TABLE IF NOT EXISTS store_settings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    store_name TEXT NOT NULL,
+    store_type TEXT NOT NULL CHECK (store_type IN ('ecommerce', 'real_estate')),
+    setup_completed BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE store_settings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow all operations on store_settings" ON store_settings
+  FOR ALL USING (true) WITH CHECK (true);
+
+DROP TRIGGER IF EXISTS update_store_settings_updated_at ON store_settings;
+CREATE TRIGGER update_store_settings_updated_at
+  BEFORE UPDATE ON store_settings
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- 20. properties - Real Estate Listings
+CREATE TABLE IF NOT EXISTS properties (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    description TEXT,
+    price DECIMAL(12, 2),
+    currency TEXT DEFAULT 'PHP',
+    address TEXT,
+    bedrooms INT,
+    bathrooms INT,
+    sqft DECIMAL(10, 2),
+    status TEXT DEFAULT 'for_sale' CHECK (status IN ('for_sale', 'for_rent', 'sold', 'rented')),
+    image_url TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    property_type TEXT,
+    year_built INT,
+    lot_area DECIMAL(10, 2),
+    garage_spaces INT,
+    down_payment DECIMAL(12, 2),
+    monthly_amortization DECIMAL(12, 2),
+    payment_terms TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE properties ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow all operations on properties" ON properties
+  FOR ALL USING (true) WITH CHECK (true);
+
+DROP TRIGGER IF EXISTS update_properties_updated_at ON properties;
+CREATE TRIGGER update_properties_updated_at
+  BEFORE UPDATE ON properties
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE INDEX IF NOT EXISTS idx_properties_status ON properties(status);
+CREATE INDEX IF NOT EXISTS idx_properties_price ON properties(price);
+CREATE INDEX IF NOT EXISTS idx_properties_active ON properties(is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_properties_type ON properties(property_type);

@@ -38,10 +38,11 @@ export async function updateSession(request: NextRequest) {
     // Protected routes - redirect to login if not authenticated
     const isLoginPage = request.nextUrl.pathname === '/login';
     const isApiRoute = request.nextUrl.pathname.startsWith('/api');
-    // Allow public access to product detail pages (e.g., /product/abc-123)
+    // Allow public access to product/property detail pages
     const isPublicProductPage = /^\/product\/[^/]+$/.test(request.nextUrl.pathname);
+    const isPublicPropertyPage = /^\/property\/[^/]+$/.test(request.nextUrl.pathname);
 
-    if (!user && !isLoginPage && !isApiRoute && !isPublicProductPage) {
+    if (!user && !isLoginPage && !isApiRoute && !isPublicProductPage && !isPublicPropertyPage) {
         // Redirect unauthenticated users to login
         const url = request.nextUrl.clone();
         url.pathname = '/login';
