@@ -686,3 +686,32 @@ SELECT
 FROM response_feedback
 GROUP BY DATE_TRUNC('day', created_at)
 ORDER BY feedback_date DESC;
+
+-- ============================================================================
+-- PAYMENT STATUS AND COD ENHANCEMENT FOR ORDERS
+-- Adds payment tracking and Cash on Delivery (COD) indicator
+-- ============================================================================
+
+-- Create payment_status enum type
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'payment_status') THEN
+    CREATE TYPE payment_status AS ENUM ('pending', 'paid', 'failed', 'refunded', 'cancelled');
+  END IF;
+END $$;
+
+-- Add payment_status column to orders table
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status payment_status DEFAULT 'pending';
+
+-- Add is_cod column to identify Cash on Delivery orders
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_cod BOOLEAN DEFAULT false;
+
+-- Create index for faster filtering by payment status
+CREATE INDEX IF NOT EXISTS idx_orders_payment_status ON orders(payment_status);
+
+-- Create index for COD orders
+CREATE INDEX IF NOT EXISTS idx_orders_is_cod ON orders(is_cod) WHERE is_cod = true;
+
+-- Comments for documentation
+COMMENT ON COLUMN orders.payment_status IS 'Payment status: pending, paid, failed, refunded, cancelled';
+COMMENT ON COLUMN orders.is_cod IS 'Whether this is a Cash on Delivery order';
